@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#191C16">
+<meta name="description" content="Guided four-count box breathing with voice or tone pacing.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Box">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon-32.png" sizes="32x32">
+<link rel="icon" href="icon-192.png" sizes="192x192">
+<title>Box Breathing</title>
+<style>
+  :root{
+    --field:#191C16;
+    --panel:#22261E;
+    --rule:#3A4032;
+    --bone:#D8D3C0;
+    --drab:#8A9578;
+    --signal:#D9A441;
+    --rust:#A8452B;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--field);
+    background-image:
+      linear-gradient(rgba(138,149,120,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(138,149,120,.045) 1px, transparent 1px);
+    background-size:22px 22px;
+    color:var(--bone);
+    font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;
+    line-height:1.55;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:0 20px 72px;padding-top:env(safe-area-inset-top)}
+
+  .bar{
+    display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    padding:18px 0 14px;border-bottom:1px solid var(--rule);
+    font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;
+  }
+  .bar .lead{color:var(--bone)}
+  .bar .meta{color:var(--drab);font-variant-numeric:tabular-nums;text-align:right}
+  .chip{
+    display:none;margin-left:10px;font-size:9px;letter-spacing:.18em;
+    color:var(--drab);border:1px solid var(--rule);padding:2px 6px;
+  }
+  .chip.on{display:inline}
+
+  .stage{position:relative;margin:26px auto 0;max-width:340px}
+  svg{display:block;width:100%;height:auto;overflow:visible}
+  .readout{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;pointer-events:none;
+  }
+  .count{
+    font-family:var(--mono);font-weight:400;
+    font-size:clamp(3.6rem,17vw,5.4rem);line-height:1;
+    font-variant-numeric:tabular-nums;color:var(--bone);
+  }
+  .phase{
+    font-family:var(--mono);font-size:12px;letter-spacing:.34em;
+    text-transform:uppercase;margin-top:14px;color:var(--signal);text-align:center;
+  }
+  .phase.hold{color:var(--drab)}
+  .hint{
+    font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--drab);margin-top:8px;min-height:14px;
+    text-align:center;padding:0 12px;
+  }
+
+  .controls{display:flex;gap:10px;justify-content:center;margin-top:30px}
+  button{
+    font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--bone);background:transparent;border:1px solid var(--rule);
+    padding:13px 26px;cursor:pointer;border-radius:0;
+    transition:border-color .15s, color .15s, background-color .15s;
+  }
+  button:hover{border-color:var(--drab)}
+  button:focus-visible{outline:2px solid var(--signal);outline-offset:2px}
+  .primary{border-color:var(--signal);color:var(--signal)}
+  .primary:hover{background:rgba(217,164,65,.1);border-color:var(--signal)}
+
+  .opts{
+    display:flex;flex-wrap:wrap;gap:22px;justify-content:center;
+    margin-top:30px;padding-top:22px;border-top:1px solid var(--rule);
+  }
+  .opt{display:flex;align-items:center;gap:10px}
+  .opt .label{
+    font-family:var(--mono);font-size:10px;letter-spacing:.2em;
+    text-transform:uppercase;color:var(--drab);
+  }
+  .seg{display:flex}
+  .seg button{padding:7px 12px;font-size:11px;letter-spacing:.1em;border-left-width:0}
+  .seg button:first-child{border-left-width:1px}
+  .seg button.is-on{color:var(--field);background:var(--drab);border-color:var(--drab)}
+  .seg button[disabled]{opacity:.35;cursor:not-allowed}
+
+  h2{
+    font-family:var(--mono);font-size:11px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--drab);font-weight:400;margin:52px 0 16px;
+    padding-bottom:10px;border-bottom:1px solid var(--rule);
+  }
+  p{margin:0 0 14px;font-size:15.5px;color:var(--bone)}
+  .lede{color:var(--drab);font-size:14.5px}
+
+  .step{display:flex;gap:16px;padding:14px 0;border-bottom:1px solid rgba(58,64,50,.6)}
+  .step .num{
+    font-family:var(--mono);font-size:12px;letter-spacing:.1em;color:var(--signal);
+    padding-top:3px;flex:0 0 auto;
+  }
+  .step.hold .num{color:var(--drab)}
+  .step .body{font-size:15.5px}
+  .step .body b{
+    display:block;font-family:var(--mono);font-weight:400;font-size:11px;
+    letter-spacing:.22em;text-transform:uppercase;color:var(--drab);margin-bottom:4px;
+  }
+
+  ul{margin:0 0 14px;padding-left:18px}
+  li{margin-bottom:8px;font-size:15.5px}
+
+  .safety{border-left:2px solid var(--rust);padding:2px 0 2px 18px;margin-top:8px}
+  .safety p{font-size:14.5px;color:var(--drab)}
+
+  footer{
+    margin-top:54px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--drab);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    button{transition:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="bar">
+    <span class="lead">Box Breathing<span class="chip" id="chip">Offline ready</span></span>
+    <span class="meta" id="meta">Pace 4 / Ready</span>
+  </div>
+
+  <div class="stage">
+    <svg viewBox="0 0 300 300" aria-hidden="true">
+      <rect id="lung" x="30" y="270" width="240" height="0" fill="rgba(217,164,65,.09)"></rect>
+      <rect x="30" y="30" width="240" height="240" fill="none" stroke="#3A4032" stroke-width="2"></rect>
+      <line id="trace" x1="30" y1="270" x2="30" y2="270" stroke="#D9A441" stroke-width="3"></line>
+      <circle id="dot" cx="30" cy="270" r="6" fill="#D9A441"></circle>
+    </svg>
+    <div class="readout">
+      <div class="count" id="count">4</div>
+      <div class="phase" id="phase" aria-live="polite">Ready</div>
+      <div class="hint" id="hint">Sit tall, empty your lungs</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="primary" id="go">Begin</button>
+    <button id="reset">Reset</button>
+  </div>
+
+  <div class="opts">
+    <div class="opt">
+      <span class="label">Count</span>
+      <div class="seg" id="paceSeg">
+        <button data-v="3">3s</button>
+        <button data-v="4" class="is-on">4s</button>
+        <button data-v="5">5s</button>
+        <button data-v="6">6s</button>
+      </div>
+    </div>
+    <div class="opt">
+      <span class="label">Rounds</span>
+      <div class="seg" id="roundSeg">
+        <button data-v="4">4</button>
+        <button data-v="8" class="is-on">8</button>
+        <button data-v="12">12</button>
+        <button data-v="0">Open</button>
+      </div>
+    </div>
+    <div class="opt">
+      <span class="label">Guide</span>
+      <div class="seg" id="guideSeg">
+        <button data-v="0" class="is-on">Silent</button>
+        <button data-v="1">Tone</button>
+        <button data-v="2" id="voiceBtn">Voice</button>
+      </div>
+    </div>
+  </div>
+
+  <h2>The Drill</h2>
+  <p class="lede">Four equal counts, four sides of a square. Sit or stand upright, feet flat, one hand on your belly. Breathe all the way out before round one.</p>
+
+  <div class="step">
+    <span class="num">01</span>
+    <span class="body"><b>Left side - Breathe in</b>In through the nose for four counts. The hand on your belly moves first, your chest second. Fill smoothly rather than gulping.</span>
+  </div>
+  <div class="step hold">
+    <span class="num">02</span>
+    <span class="body"><b>Top - Hold full</b>Four counts with the air in. Keep your throat open and your shoulders down. You are pausing, not straining.</span>
+  </div>
+  <div class="step">
+    <span class="num">03</span>
+    <span class="body"><b>Right side - Breathe out</b>Out through the nose or pursed lips for four counts, slow and even. Aim to still have a little air left at the end of the count.</span>
+  </div>
+  <div class="step hold">
+    <span class="num">04</span>
+    <span class="body"><b>Bottom - Hold empty</b>Four counts with the lungs quiet. This is the hard side. Stay relaxed through it and go straight into the next round.</span>
+  </div>
+
+  <h2>Why It Works</h2>
+  <p>Slowing to roughly four breaths a minute, with a pause at each end, shifts you out of a fight-or-flight pattern. Heart rate settles, the shaking in your hands eases, and the counting gives your attention one simple job instead of whatever spun you up.</p>
+  <p>Military and emergency crews use this one - some call it tactical or combat breathing - because it needs no equipment, works standing in the dark, and nobody watching can tell you are doing it.</p>
+
+  <h2>When To Run It</h2>
+  <ul>
+    <li><b>Before:</b> the interview, the heavy set, the conversation you have been putting off.</li>
+    <li><b>During a spike:</b> when your hands go unsteady and your thinking narrows to a point.</li>
+    <li><b>After:</b> to come down, so leftover adrenaline does not keep you wired for an hour.</li>
+    <li><b>To sleep:</b> run it lying down and let the counts stretch out.</li>
+  </ul>
+
+  <h2>Progression</h2>
+  <p>Four rounds is a reset. Eight to twelve is a session. If four counts feels like a strain, drop to three and stay there for a week - a pace you can hold calmly beats a longer one you have to fight. Only lengthen the count once the current one feels boring.</p>
+
+  <h2>Before You Start</h2>
+  <div class="safety">
+    <p>Ease off if you feel light-headed, tingly, or short of breath: shorten the holds, or just breathe normally for a minute. Skip the breath holds and talk to a doctor first if you are pregnant, or have a heart or lung condition, high blood pressure, or a history of fainting or seizures. Never practise this while driving or in water.</p>
+  </div>
+
+  <footer>Four in / four hold / four out / four hold</footer>
+</div>
+
+<script>
+(function(){
+  var PHASES = [
+    { name:"Breathe in",  hint:"Belly first, through the nose", hold:false, tone:587.33, say:"Breathe in" },
+    { name:"Hold full",   hint:"Lungs full, throat open",       hold:true,  tone:440.00, say:"Hold" },
+    { name:"Breathe out", hint:"Slow and even, do not dump it", hold:false, tone:392.00, say:"Breathe out" },
+    { name:"Hold empty",  hint:"Lungs empty, stay loose",       hold:true,  tone:440.00, say:"Hold empty" }
+  ];
+
+  var X0 = 30, Y0 = 30, X1 = 270, Y1 = 270, SIZE = 240;
+
+  var el = {
+    count: document.getElementById("count"),
+    phase: document.getElementById("phase"),
+    hint:  document.getElementById("hint"),
+    meta:  document.getElementById("meta"),
+    chip:  document.getElementById("chip"),
+    go:    document.getElementById("go"),
+    reset: document.getElementById("reset"),
+    dot:   document.getElementById("dot"),
+    trace: document.getElementById("trace"),
+    lung:  document.getElementById("lung"),
+    voiceBtn: document.getElementById("voiceBtn")
+  };
+
+  var pace = 4, totalRounds = 8;
+  var guide = 0;              // 0 silent, 1 tone, 2 voice
+  var state = "idle";         // idle | prep | running | paused | done
+  var phaseIdx = 0, round = 1;
+  var phaseStart = 0, pausedAt = 0, prepEnd = 0, sessionStart = 0, sessionMs = 0;
+  var ctx = null, wakeLock = null;
+
+  /* ---------- voice ---------- */
+
+  var synth = window.speechSynthesis || null;
+  var voice = null, voicePrimed = false;
+
+  function pickVoice(){
+    if(!synth) return;
+    var all = synth.getVoices() || [];
+    if(!all.length) return;
+    var en = all.filter(function(v){ return /^en/i.test(v.lang); });
+    /* Prefer a voice stored on the device, so guidance still speaks with
+       no connection. Some Android voices synthesise server side. */
+    var local = en.filter(function(v){ return v.localService; });
+    var pool = local.length ? local : en;
+    voice = pool[0] || all[0] || null;
+  }
+
+  if(synth){
+    pickVoice();
+    if(typeof synth.onvoiceschanged !== "undefined"){
+      synth.addEventListener("voiceschanged", pickVoice);
+    }
+  } else {
+    el.voiceBtn.disabled = true;
+    el.voiceBtn.title = "This browser has no speech synthesis";
+  }
+
+  function say(text, force){
+    if(!synth) return;
+    if(guide !== 2 && !force) return;
+    try{
+      synth.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      if(voice) u.voice = voice;
+      u.rate = 0.92; u.pitch = 1; u.volume = 1; u.lang = voice ? voice.lang : "en-US";
+      synth.speak(u);
+    }catch(e){}
+  }
+
+  /* iOS will not speak unless the first utterance comes from a tap. */
+  function primeVoice(){
+    if(!synth || voicePrimed) return;
+    try{
+      var u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0; synth.speak(u);
+      voicePrimed = true;
+    }catch(e){}
+  }
+
+  /* ---------- tone and haptics ---------- */
+
+  function tone(freq){
+    if(guide !== 1) return;
+    try{
+      if(!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if(ctx.state === "suspended") ctx.resume();
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = "sine"; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.14, ctx.currentTime + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+      o.connect(g); g.connect(ctx.destination);
+      o.start(); o.stop(ctx.currentTime + 0.45);
+    }catch(e){}
+  }
+
+  function buzz(ms){
+    if(navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} }
+  }
+
+  function cue(i){
+    tone(PHASES[i].tone);
+    say(PHASES[i].say);
+    buzz(35);
+  }
+
+  /* ---------- screen wake lock ---------- */
+
+  function holdScreen(){
+    if(!navigator.wakeLock || wakeLock) return;
+    navigator.wakeLock.request("screen").then(function(l){
+      wakeLock = l;
+      l.addEventListener("release", function(){ wakeLock = null; });
+    }).catch(function(){});
+  }
+  function freeScreen(){
+    if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock = null; }
+  }
+  document.addEventListener("visibilitychange", function(){
+    if(document.visibilityState === "visible" &&
+       (state === "running" || state === "prep")) holdScreen();
+  });
+
+  /* ---------- geometry ---------- */
+
+  function edgePoint(i, t){
+    if(i === 0) return { ax:X0, ay:Y1, x:X0, y:Y1 - t*SIZE };
+    if(i === 1) return { ax:X0, ay:Y0, x:X0 + t*SIZE, y:Y0 };
+    if(i === 2) return { ax:X1, ay:Y0, x:X1, y:Y0 + t*SIZE };
+    return { ax:X1, ay:Y1, x:X1 - t*SIZE, y:Y1 };
+  }
+
+  function levelFor(i, t){
+    if(i === 0) return t;
+    if(i === 1) return 1;
+    if(i === 2) return 1 - t;
+    return 0;
+  }
+
+  function paint(i, t){
+    var p = edgePoint(i, t);
+    var col = PHASES[i].hold ? "#8A9578" : "#D9A441";
+    el.trace.setAttribute("x1", p.ax); el.trace.setAttribute("y1", p.ay);
+    el.trace.setAttribute("x2", p.x);  el.trace.setAttribute("y2", p.y);
+    el.trace.setAttribute("stroke", col);
+    el.dot.setAttribute("cx", p.x); el.dot.setAttribute("cy", p.y);
+    el.dot.setAttribute("fill", col);
+    var lvl = levelFor(i, t);
+    el.lung.setAttribute("height", SIZE * lvl);
+    el.lung.setAttribute("y", Y1 - SIZE * lvl);
+    el.lung.setAttribute("fill", PHASES[i].hold ? "rgba(138,149,120,.10)" : "rgba(217,164,65,.10)");
+  }
+
+  function setPhaseText(i){
+    el.phase.textContent = PHASES[i].name;
+    el.phase.className = PHASES[i].hold ? "phase hold" : "phase";
+    el.hint.textContent = PHASES[i].hint;
+  }
+
+  function fmt(ms){
+    var s = Math.round(ms/1000);
+    var m = Math.floor(s/60), r = s % 60;
+    return m + ":" + (r < 10 ? "0" + r : r);
+  }
+
+  function meta(){
+    if(state === "done"){ el.meta.textContent = "Complete / " + fmt(sessionMs); return; }
+    if(state === "idle"){ el.meta.textContent = "Pace " + pace + " / Ready"; return; }
+    var of = totalRounds ? " of " + totalRounds : "";
+    el.meta.textContent = "Pace " + pace + " / Round " + round + of;
+  }
+
+  /* ---------- session ---------- */
+
+  function reset(){
+    state = "idle"; phaseIdx = 0; round = 1; sessionMs = 0;
+    if(synth) synth.cancel();
+    freeScreen();
+    el.go.textContent = "Begin";
+    el.count.textContent = String(pace);
+    el.phase.textContent = "Ready"; el.phase.className = "phase";
+    el.hint.textContent = "Sit tall, empty your lungs";
+    paint(0, 0);
+    meta();
+  }
+
+  function begin(){
+    primeVoice();
+    state = "prep";
+    prepEnd = performance.now() + 3000;
+    sessionStart = performance.now();
+    round = 1; phaseIdx = 0;
+    el.go.textContent = "Pause";
+    el.phase.textContent = "Get set"; el.phase.className = "phase hold";
+    el.hint.textContent = "Breathe all the way out";
+    say("Get set. Breathe all the way out.");
+    holdScreen();
+    meta();
+  }
+
+  function advance(){
+    phaseIdx = (phaseIdx + 1) % 4;
+    if(phaseIdx === 0){
+      round++;
+      if(totalRounds && round > totalRounds){
+        state = "done";
+        sessionMs = performance.now() - sessionStart;
+        freeScreen();
+        el.go.textContent = "Begin";
+        el.count.textContent = String(totalRounds);
+        el.phase.textContent = "Rounds done"; el.phase.className = "phase";
+        el.hint.textContent = "Sit with it for a moment";
+        paint(3, 1);
+        meta();
+        say("Session complete.");
+        buzz([60,80,60]);
+        return false;
+      }
+    }
+    setPhaseText(phaseIdx);
+    cue(phaseIdx);
+    meta();
+    return true;
+  }
+
+  function loop(now){
+    if(state === "prep"){
+      var left = prepEnd - now;
+      if(left <= 0){
+        phaseStart = now;
+        setPhaseText(0);
+        state = "running";
+        cue(0);
+      } else {
+        el.count.textContent = String(Math.ceil(left/1000));
+        paint(0, 0);
+      }
+    } else if(state === "running"){
+      var dur = pace * 1000;
+      var elapsed = now - phaseStart;
+      var guard = 0;
+      while(elapsed >= dur && guard < 8){
+        phaseStart += dur;
+        elapsed -= dur;
+        guard++;
+        if(!advance()){ requestAnimationFrame(loop); return; }
+      }
+      var t = Math.min(elapsed / dur, 1);
+      paint(phaseIdx, t);
+      el.count.textContent = String(Math.min(pace, Math.floor(elapsed/1000) + 1));
+    }
+    requestAnimationFrame(loop);
+  }
+
+  el.go.addEventListener("click", function(){
+    if(state === "idle" || state === "done"){ begin(); return; }
+    if(state === "running" || state === "prep"){
+      pausedAt = performance.now();
+      state = "paused";
+      if(synth) synth.cancel();
+      freeScreen();
+      el.go.textContent = "Resume";
+      el.hint.textContent = "Paused";
+      return;
+    }
+    if(state === "paused"){
+      var gap = performance.now() - pausedAt;
+      phaseStart += gap; prepEnd += gap; sessionStart += gap;
+      state = (el.phase.textContent === "Get set") ? "prep" : "running";
+      el.go.textContent = "Pause";
+      holdScreen();
+      if(state === "running") el.hint.textContent = PHASES[phaseIdx].hint;
+    }
+  });
+
+  el.reset.addEventListener("click", reset);
+
+  function seg(id, cb){
+    var box = document.getElementById(id);
+    box.addEventListener("click", function(e){
+      var b = e.target.closest ? e.target.closest("button") : null;
+      if(!b || b.disabled) return;
+      var kids = box.querySelectorAll("button");
+      for(var i=0;i<kids.length;i++) kids[i].classList.remove("is-on");
+      b.classList.add("is-on");
+      cb(parseInt(b.getAttribute("data-v"), 10));
+    });
+  }
+
+  seg("paceSeg", function(v){ pace = v; reset(); });
+  seg("roundSeg", function(v){ totalRounds = v; reset(); });
+  seg("guideSeg", function(v){
+    guide = v;
+    if(synth) synth.cancel();
+    if(v === 1) tone(440);
+    if(v === 2){ primeVoice(); say("Voice guidance on", true); }
+  });
+
+  reset();
+  requestAnimationFrame(loop);
+
+  /* ---------- offline ---------- */
+
+  if("serviceWorker" in navigator){
+    window.addEventListener("load", function(){
+      navigator.serviceWorker.register("sw.js").catch(function(){});
+      navigator.serviceWorker.ready.then(function(){
+        el.chip.classList.add("on");
+      }).catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
