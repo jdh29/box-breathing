@@ -1,7 +1,7 @@
 /* Box Breathing - offline shell.
    Bump VERSION on every deploy. Old caches are dropped on activate,
    which is what forces iOS Safari to let go of the previous build. */
-var VERSION = "box-breathing-v2";
+var VERSION = "box-breathing-v3";
 
 var SHELL = [
   "./",

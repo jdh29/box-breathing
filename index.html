@@ -128,6 +128,23 @@
   .safety{border-left:2px solid var(--rust);padding:2px 0 2px 18px;margin-top:8px}
   .safety p{font-size:14.5px;color:var(--drab)}
 
+  .logRow{
+    display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    padding:10px 0;border-bottom:1px solid rgba(58,64,50,.6);
+    font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;
+  }
+  .logRow .when{color:var(--bone)}
+  .logRow .detail{color:var(--drab);text-align:right}
+  .logEmpty{
+    font-family:var(--mono);font-size:11px;color:var(--drab);padding:4px 0 2px;
+  }
+  .clearLog{
+    display:block;margin-top:16px;background:none;border:none;padding:0;
+    font-family:var(--mono);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
+    color:var(--drab);cursor:pointer;
+  }
+  .clearLog:hover{color:var(--rust)}
+
   footer{
     margin-top:54px;padding-top:18px;border-top:1px solid var(--rule);
     font-family:var(--mono);font-size:10px;letter-spacing:.18em;
@@ -193,6 +210,18 @@
         <button data-v="2" id="voiceBtn">Voice</button>
       </div>
     </div>
+    <div class="opt">
+      <span class="label">Voice</span>
+      <div class="seg" id="genderSeg">
+        <button data-v="female" class="is-on">Female</button>
+        <button data-v="male">Male</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="log">
+    <h2>Session Log</h2>
+    <div id="logBody"></div>
   </div>
 
   <h2>The Drill</h2>
@@ -260,20 +289,67 @@
     dot:   document.getElementById("dot"),
     trace: document.getElementById("trace"),
     lung:  document.getElementById("lung"),
-    voiceBtn: document.getElementById("voiceBtn")
+    voiceBtn: document.getElementById("voiceBtn"),
+    logBody: document.getElementById("logBody")
   };
 
   var pace = 4, totalRounds = 8;
   var guide = 0;              // 0 silent, 1 tone, 2 voice
+  var genderPref = "female";  // "female" or "male" - which voice to prefer
   var state = "idle";         // idle | prep | running | paused | done
   var phaseIdx = 0, round = 1;
   var phaseStart = 0, pausedAt = 0, prepEnd = 0, sessionStart = 0, sessionMs = 0;
   var ctx = null, wakeLock = null;
 
+  /* ---------- persisted settings ---------- */
+
+  var SETTINGS_KEY = "boxBreathing.settings";
+
+  function loadSettings(){
+    try{ return JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}"); }catch(e){ return {}; }
+  }
+
+  function saveSettings(){
+    try{
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify({
+        pace: pace, totalRounds: totalRounds, guide: guide, genderPref: genderPref
+      }));
+    }catch(e){}
+  }
+
+  (function applySavedSettings(){
+    var s = loadSettings();
+    if(typeof s.pace === "number") pace = s.pace;
+    if(typeof s.totalRounds === "number") totalRounds = s.totalRounds;
+    if(typeof s.guide === "number") guide = s.guide;
+    if(s.genderPref === "male" || s.genderPref === "female") genderPref = s.genderPref;
+  })();
+
   /* ---------- voice ---------- */
 
   var synth = window.speechSynthesis || null;
   var voice = null, voicePrimed = false;
+
+  /* The Web Speech API has no gender field, so voices are matched by
+     name. Android/Chrome voices often say "Male"/"Female" outright;
+     these lists cover the common iOS, macOS, and Windows voice names
+     as a fallback where the platform does not label it. */
+  var MALE_HINTS = ["male","daniel","alex","fred","aaron","arthur","oliver",
+    "gordon","rishi","tom","lee","ralph","bruce","albert","eddy","reed",
+    "rocko","nathan","david","james","mark","george","brian","guy","liam",
+    "ryan","matthew","thomas","henry"];
+  var FEMALE_HINTS = ["female","samantha","karen","moira","tessa","victoria",
+    "susan","allison","ava","zoe","nicky","kathy","veena","fiona","kate",
+    "joanna","salli","amy","emma","zira","hazel","serena","linda","catherine",
+    "sara","claire","martha","noelle","kendra"];
+
+  function scoreVoice(v, hints){
+    var n = v.name.toLowerCase();
+    for(var i=0;i<hints.length;i++){
+      if(n.indexOf(hints[i]) !== -1) return true;
+    }
+    return false;
+  }
 
   function pickVoice(){
     if(!synth) return;
@@ -284,7 +360,11 @@
        no connection. Some Android voices synthesise server side. */
     var local = en.filter(function(v){ return v.localService; });
     var pool = local.length ? local : en;
-    voice = pool[0] || all[0] || null;
+    if(!pool.length) pool = all;
+
+    var hints = genderPref === "male" ? MALE_HINTS : FEMALE_HINTS;
+    var match = pool.filter(function(v){ return scoreVoice(v, hints); });
+    voice = match[0] || pool[0] || all[0] || null;
   }
 
   if(synth){
@@ -295,6 +375,9 @@
   } else {
     el.voiceBtn.disabled = true;
     el.voiceBtn.title = "This browser has no speech synthesis";
+    var gseg = document.getElementById("genderSeg");
+    var gkids = gseg.querySelectorAll("button");
+    for(var gi=0; gi<gkids.length; gi++) gkids[gi].disabled = true;
   }
 
   function say(text, force){
@@ -412,6 +495,63 @@
     el.meta.textContent = "Pace " + pace + " / Round " + round + of;
   }
 
+  /* ---------- session log ---------- */
+
+  var LOG_KEY = "boxBreathing.log";
+
+  function loadLog(){
+    try{ return JSON.parse(localStorage.getItem(LOG_KEY) || "[]"); }catch(e){ return []; }
+  }
+
+  function saveLog(entries){
+    try{ localStorage.setItem(LOG_KEY, JSON.stringify(entries.slice(-50))); }catch(e){}
+  }
+
+  function fmtWhen(ts){
+    var d = new Date(ts);
+    var datePart = d.toLocaleDateString(undefined, { month:"short", day:"numeric" });
+    var timePart = d.toLocaleTimeString(undefined, { hour:"numeric", minute:"2-digit" });
+    return datePart + ", " + timePart;
+  }
+
+  function renderLog(){
+    var entries = loadLog().slice().reverse().slice(0, 10);
+    if(!entries.length){
+      el.logBody.innerHTML = '<p class="logEmpty">No sessions logged yet. Complete a round set to add one.</p>';
+      return;
+    }
+    var rows = entries.map(function(en){
+      return '<div class="logRow"><span class="when">' + fmtWhen(en.t) +
+        '</span><span class="detail">' + en.rounds + ' rounds &middot; ' +
+        en.pace + 's pace &middot; ' + fmt(en.ms) + '</span></div>';
+    }).join("");
+    el.logBody.innerHTML = rows +
+      '<button class="clearLog" id="clearLog" type="button">Clear log</button>';
+    document.getElementById("clearLog").addEventListener("click", handleClearClick);
+  }
+
+  var clearArmed = false, clearTimer = null;
+  function handleClearClick(e){
+    var btn = e.currentTarget;
+    if(!clearArmed){
+      clearArmed = true;
+      btn.textContent = "Tap again to clear";
+      clearTimer = setTimeout(function(){ clearArmed = false; renderLog(); }, 3000);
+    } else {
+      clearTimeout(clearTimer);
+      clearArmed = false;
+      saveLog([]);
+      renderLog();
+    }
+  }
+
+  function logSession(){
+    var entries = loadLog();
+    entries.push({ t: Date.now(), rounds: totalRounds, pace: pace, ms: sessionMs });
+    saveLog(entries);
+    renderLog();
+  }
+
   /* ---------- session ---------- */
 
   function reset(){
@@ -447,6 +587,7 @@
       if(totalRounds && round > totalRounds){
         state = "done";
         sessionMs = performance.now() - sessionStart;
+        logSession();
         freeScreen();
         el.go.textContent = "Begin";
         el.count.textContent = String(totalRounds);
@@ -525,19 +666,44 @@
       var kids = box.querySelectorAll("button");
       for(var i=0;i<kids.length;i++) kids[i].classList.remove("is-on");
       b.classList.add("is-on");
-      cb(parseInt(b.getAttribute("data-v"), 10));
+      cb(b.getAttribute("data-v"));
     });
   }
 
-  seg("paceSeg", function(v){ pace = v; reset(); });
-  seg("roundSeg", function(v){ totalRounds = v; reset(); });
+  function syncSeg(id, value){
+    var box = document.getElementById(id);
+    var kids = box.querySelectorAll("button");
+    for(var i=0;i<kids.length;i++){
+      if(kids[i].getAttribute("data-v") === String(value)) kids[i].classList.add("is-on");
+      else kids[i].classList.remove("is-on");
+    }
+  }
+
+  seg("paceSeg", function(v){ pace = parseInt(v, 10); saveSettings(); reset(); });
+  seg("roundSeg", function(v){ totalRounds = parseInt(v, 10); saveSettings(); reset(); });
   seg("guideSeg", function(v){
-    guide = v;
+    guide = parseInt(v, 10);
+    saveSettings();
     if(synth) synth.cancel();
-    if(v === 1) tone(440);
-    if(v === 2){ primeVoice(); say("Voice guidance on", true); }
+    if(guide === 1) tone(440);
+    if(guide === 2){ primeVoice(); pickVoice(); say("Voice guidance on", true); }
+  });
+  seg("genderSeg", function(v){
+    genderPref = v;
+    saveSettings();
+    pickVoice();
+    if(guide === 2){ primeVoice(); say("Voice guidance on", true); }
   });
 
+  /* Reflect any settings loaded from a prior visit onto the controls
+     before the first paint, since the HTML's default is-on classes
+     only match a fresh install. */
+  syncSeg("paceSeg", pace);
+  syncSeg("roundSeg", totalRounds);
+  syncSeg("guideSeg", guide);
+  syncSeg("genderSeg", genderPref);
+
+  renderLog();
   reset();
   requestAnimationFrame(loop);
 
